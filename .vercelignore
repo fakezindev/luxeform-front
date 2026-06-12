@@ -2,6 +2,4 @@
 server.js
 database.js
 .env
-package.json
-package-lock.json
 node_modules/
