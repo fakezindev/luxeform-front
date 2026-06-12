@@ -1,5 +1,5 @@
 {
   "cleanUrls": true,
-  "buildCommand": "echo 'No build step required'",
-  "outputDirectory": "."
+  "buildCommand": "mkdir -p dist && cp -r index.html src dist/",
+  "outputDirectory": "dist"
 }
