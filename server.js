@@ -6,6 +6,10 @@ const db = require('./database');
 require('dotenv').config();
 
 const app = express();
+
+// Permite identificar o IP real do cliente atrás do proxy reverso do Render / Cloudflare
+app.set('trust proxy', 1);
+
 app.use(express.json());
 const allowedOrigins = [
     'https://luxeformllcfl.com',
@@ -38,6 +42,8 @@ app.use(cors({
 const limiter = rateLimit({
     windowMs: 1 * 60 * 1000, 
     max: 3,
+    standardHeaders: true,
+    legacyHeaders: false,
     message: { error: 'Too many requests from this IP, please try again later.' }
 });
 
@@ -131,6 +137,12 @@ app.post('/api/estimates', limiter, async (req, res) => {
         console.error(error);
         return res.status(500).json({ error: 'Internal error processing request.' });
     }
+});
+
+// Middleware de tratamento de erros global para evitar requisições presas
+app.use((err, req, res, next) => {
+    console.error('Unhandled server error:', err);
+    res.status(500).json({ error: 'An unexpected server error occurred.' });
 });
 
 const PORT = process.env.PORT || 5000;
