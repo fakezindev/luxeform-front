@@ -88,7 +88,7 @@ app.post('/api/estimates', limiter, async (req, res) => {
         // 4️⃣ Configuração do Remetente e Destinatário
         // No Resend, o "from" deve ser 'onboarding@resend.dev' até que o domínio próprio esteja verificado na plataforma.
         const sender = process.env.RESEND_FROM || 'LuxeForm Remodeling <onboarding@resend.dev>';
-        const recipient = process.env.NOTIFICATION_EMAIL || 'zetabr.bruno@gmail.com';
+        const recipient = process.env.NOTIFICATION_EMAIL || 'ph61851@gmail.com';
 
         // 5️⃣ Disparo do e-mail via HTTPS (Resend)
         const { error: resendError } = await resend.emails.send({
