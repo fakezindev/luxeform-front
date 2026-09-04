@@ -7,11 +7,32 @@ require('dotenv').config();
 
 const app = express();
 app.use(express.json());
+const allowedOrigins = [
+    'https://luxeformllcfl.com',
+    'http://luxeformllcfl.com',
+    'https://www.luxeformllcfl.com',
+    'http://www.luxeformllcfl.com',
+    'https://luxeform-front.vercel.app'
+];
+
 app.use(cors({
-    origin: ['http://luxeformllcfl.com', 'https://luxeform-front.vercel.app'],
-    methods: ['POST'],
+    origin: function (origin, callback) {
+        // Permite requisições sem origin (como mobile apps, curl, postman)
+        if (!origin) return callback(null, true);
+
+        // Permite origens da lista, portas localhost/127.0.0.1 (ex: Live Server 5500) e deploys da Vercel
+        const isAllowed = allowedOrigins.includes(origin) ||
+            /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+            /^https:\/\/.*\.vercel\.app$/.test(origin);
+
+        if (isAllowed) {
+            return callback(null, true);
+        }
+        return callback(null, false);
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type']
-})); // URL aqui
+}));
 
 // Trava de Segurança Anti-Spam (Máximo 3 requisições por minuto por IP)
 const limiter = rateLimit({
@@ -69,9 +90,17 @@ app.post('/api/estimates', limiter, async (req, res) => {
 
         // 2. Disparo do e-mail de notificação para o cliente LuxeForm
         await transporter.sendMail({
-            from: `"LuxeForm Sistema" <no-reply@luxeform.com>`,
-            to: 'luxeform.llc@gmail.com', // zetabr.bruno@gmail.com
-            subject: `🔥 Novo Orçamento #${leadId} Solicitado - ${service}`,
+            from: `"LuxeForm Remodeling" <${process.env.EMAIL_USER}>`,
+            replyTo: email,
+            to: 'Luxeform.llc@gmail.com', //  zetabr.bruno@gmail.com
+            subject: `New Estimate Request #${leadId} - ${fullName} (${service})`,
+            text: `New Estimate Request #${leadId}\n\n` +
+                  `Name: ${fullName}\n` +
+                  `Email: ${email}\n` +
+                  `Phone: ${phoneNumber}\n` +
+                  `Service: ${service}\n` +
+                  `Project Details:\n${projectDetails || 'No details provided.'}\n\n` +
+                  `Reply via WhatsApp: ${whatsappUrl}`,
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
                     <h2 style="color: #8B1E2F; border-bottom: 2px solid #8B1E2F; padding-bottom: 10px;">New Estimate Request #${leadId}</h2>

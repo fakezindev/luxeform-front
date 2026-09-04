@@ -30,9 +30,23 @@ if (form) {
             projectDetails: form.querySelector('textarea').value
         };
 
+        const submitButton = form.querySelector('button[type="submit"]');
+        const originalButtonHtml = submitButton ? submitButton.innerHTML : 'Send Message';
+
         try {
-            // Dispara a requisição para o seu backend em Node.js
-            const response = await fetch('https://luxeform-api.onrender.com/api/estimates', {
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.innerHTML = 'Sending... <i class="fa-solid fa-spinner fa-spin"></i>';
+            }
+
+            // Detecta se está rodando localmente (Live Server, localhost, 127.0.0.1) ou em produção
+            const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname) || window.location.protocol === 'file:';
+            const apiUrl = isLocal
+                ? 'http://localhost:5000/api/estimates'
+                : 'https://luxeform-api.onrender.com/api/estimates';
+
+            // Dispara a requisição para o backend
+            const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -53,6 +67,11 @@ if (form) {
         } catch (error) {
             console.error('Error in form submission:', error);
             alert('Not able to send form. Please try again later.');
+        } finally {
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalButtonHtml;
+            }
         }
     });
 }
