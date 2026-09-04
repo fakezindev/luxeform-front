@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const db = require('./database');
 require('dotenv').config();
 
@@ -11,6 +11,7 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(express.json());
+
 const allowedOrigins = [
     'https://luxeformllcfl.com',
     'http://luxeformllcfl.com',
@@ -47,16 +48,8 @@ const limiter = rateLimit({
     message: { error: 'Too many requests from this IP, please try again later.' }
 });
 
-// Configuração do Transportador de E-mail (Nodemailer)
-const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_PORT),  
-    secure: true, 
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-    },
-});
+// Inicializa a Resend com a chave da variável de ambiente
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Endpoint Único de Orçamento
 app.post('/api/estimates', limiter, async (req, res) => {
@@ -67,39 +60,42 @@ app.post('/api/estimates', limiter, async (req, res) => {
     }
 
     try {
-        // Salvar no Banco de Dados
+        // 1️⃣ Salvar no Banco de Dados
         const queryText = `
             INSERT INTO tb_estimates (full_name, email, phone_number, service_type, project_details)
             VALUES (?, ?, ?, ?, ?) 
         `;
 
-        const values = [fullName, email, phoneNumber, service, projectDetails];
+        const values = [fullName, email, phoneNumber, service || 'General Inquiry', projectDetails || ''];
         const [result] = await db.query(queryText, values);
         const leadId = result.insertId;
 
-        // 1️⃣ Limpa o número de telefone tirando espaços, parênteses e traços (Deixa só números)
-        // O WhatsApp exige o código do país. Como a LuxeForm é na Flórida (EUA), o padrão é +1.
-        // Se o número já vier com +1 do front, mantemos, senão adicionamos o 1 da região deles.
+        // 2️⃣ Formatação inteligente do telefone para o WhatsApp
         let cleanPhone = phoneNumber.replace(/\D/g, '');
-        if (!cleanPhone.startsWith('1') && cleanPhone.length === 10) {
-            cleanPhone = '1' + cleanPhone; // Adiciona o código dos EUA se o Paulo não colocou no front
+        if (cleanPhone.length === 10) {
+            cleanPhone = '1' + cleanPhone; // EUA (+1)
+        } else if (cleanPhone.length === 11 && !cleanPhone.startsWith('55')) {
+            cleanPhone = '55' + cleanPhone; // Brasil (+55) para testes
         }
 
-        // 2️⃣ Cria a mensagem personalizada codificada para a URL do WhatsApp
+        // 3️⃣ Link com texto pré-definido para abrir o WhatsApp do lead
         const whatsappText = encodeURIComponent(
             `Hi ${fullName}, thank you for contacting LuxeForm Remodeling! ` +
-            `We received your request for the "${service}" project. Let's schedule your consultation?`
+            `We received your request for the "${service || 'Custom'}" project. Let's schedule your consultation?`
         );
-
-        // 3️⃣ Monta o link final do WhatsApp
         const whatsappUrl = `https://wa.me/${cleanPhone}?text=${whatsappText}`;
 
-        // 2. Disparo do e-mail de notificação para o cliente LuxeForm
-        await transporter.sendMail({
-            from: `"LuxeForm Remodeling" <${process.env.EMAIL_USER}>`,
+        // 4️⃣ Configuração do Remetente e Destinatário
+        // No Resend, o "from" deve ser 'onboarding@resend.dev' até que o domínio próprio esteja verificado na plataforma.
+        const sender = process.env.RESEND_FROM || 'LuxeForm Remodeling <onboarding@resend.dev>';
+        const recipient = process.env.NOTIFICATION_EMAIL || 'zetabr.bruno@gmail.com';
+
+        // 5️⃣ Disparo do e-mail via HTTPS (Resend)
+        const { error: resendError } = await resend.emails.send({
+            from: sender,
             replyTo: email,
-            to: 'Luxeform.llc@gmail.com', //  zetabr.bruno@gmail.com
-            subject: `New Estimate Request #${leadId} - ${fullName} (${service})`,
+            to: recipient,
+            subject: `New Estimate Request #${leadId} - ${fullName} (${service || 'General'})`,
             text: `New Estimate Request #${leadId}\n\n` +
                   `Name: ${fullName}\n` +
                   `Email: ${email}\n` +
@@ -114,7 +110,7 @@ app.post('/api/estimates', limiter, async (req, res) => {
                     <p><strong>Name:</strong> ${fullName}</p>
                     <p><strong>Email:</strong> ${email}</p>
                     <p><strong>Phone:</strong> ${phoneNumber}</p>
-                    <p><strong>Service Type:</strong> ${service}</p>
+                    <p><strong>Service Type:</strong> ${service || 'Not specified'}</p>
                     <p><strong>Project Details:</strong></p>
                     <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #8B1E2F; margin-bottom: 25px; border-radius: 4px;">
                         ${projectDetails || 'No details provided.'}
@@ -122,7 +118,7 @@ app.post('/api/estimates', limiter, async (req, res) => {
 
                     <div style="text-align: center; margin-top: 30px;">
                         <a href="${whatsappUrl}" target="_blank" style="background-color: #25D366; color: white; text-decoration: none; padding: 14px 25px; font-weight: bold; border-radius: 5px; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                            📤 Reply via WhatsApp
+                            💬 Reply via WhatsApp
                         </a>
                     </div>
                     
@@ -132,18 +128,26 @@ app.post('/api/estimates', limiter, async (req, res) => {
             `,
         });
 
-        return res.status(200).json({ message: 'Thank you! Your estimate request has been submitted successfully. LuxeForm Remodeling has received your project details, and you will receive a WhatsApp message shortly to continue the conversation.' });
+        if (resendError) {
+            console.error('Erro retornado pela API do Resend:', resendError);
+            return res.status(500).json({ error: 'Failed to send notification email.' });
+        }
+
+        return res.status(200).json({ 
+            message: 'Thank you! Your estimate request has been submitted successfully. LuxeForm Remodeling has received your project details, and you will receive a WhatsApp message shortly to continue the conversation.' 
+        });
+
     } catch (error) {
-        console.error(error);
+        console.error('Database/Server Error:', error);
         return res.status(500).json({ error: 'Internal error processing request.' });
     }
 });
 
-// Middleware de tratamento de erros global para evitar requisições presas
+// Middleware de tratamento de erros global
 app.use((err, req, res, next) => {
     console.error('Unhandled server error:', err);
     res.status(500).json({ error: 'An unexpected server error occurred.' });
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(` Server running in port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
