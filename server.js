@@ -41,7 +41,7 @@ app.use(cors({
 
 // Trava de Segurança Anti-Spam (Máximo 3 requisições por minuto por IP)
 const limiter = rateLimit({
-    windowMs: 1 * 60 * 1000, 
+    windowMs: 1 * 60 * 1000,
     max: 3,
     standardHeaders: true,
     legacyHeaders: false,
@@ -87,22 +87,24 @@ app.post('/api/estimates', limiter, async (req, res) => {
 
         // 4️⃣ Configuração do Remetente e Destinatário
         // No Resend, o "from" deve ser 'onboarding@resend.dev' até que o domínio próprio esteja verificado na plataforma.
-        const sender = process.env.RESEND_FROM || 'LuxeForm Remodeling <onboarding@resend.dev>';
-        const recipient = process.env.NOTIFICATION_EMAIL || 'ph61851@gmail.com';
+        // Remetente oficial com o domínio verificado
+        const sender = 'LuxeForm Remodeling <noreply@luxeformllcfl.com>';
 
-        // 5️⃣ Disparo do e-mail via HTTPS (Resend)
-        const { error: resendError } = await resend.emails.send({
+        // Destinatário final (a caixa de entrada da empresa)
+        const recipient = 'Luxeform.llc@gmail.com';
+
+        await resend.emails.send({
             from: sender,
             replyTo: email,
             to: recipient,
             subject: `New Estimate Request #${leadId} - ${fullName} (${service || 'General'})`,
             text: `New Estimate Request #${leadId}\n\n` +
-                  `Name: ${fullName}\n` +
-                  `Email: ${email}\n` +
-                  `Phone: ${phoneNumber}\n` +
-                  `Service: ${service}\n` +
-                  `Project Details:\n${projectDetails || 'No details provided.'}\n\n` +
-                  `Reply via WhatsApp: ${whatsappUrl}`,
+                `Name: ${fullName}\n` +
+                `Email: ${email}\n` +
+                `Phone: ${phoneNumber}\n` +
+                `Service: ${service}\n` +
+                `Project Details:\n${projectDetails || 'No details provided.'}\n\n` +
+                `Reply via WhatsApp: ${whatsappUrl}`,
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
                     <h2 style="color: #8B1E2F; border-bottom: 2px solid #8B1E2F; padding-bottom: 10px;">New Estimate Request #${leadId}</h2>
@@ -133,8 +135,8 @@ app.post('/api/estimates', limiter, async (req, res) => {
             return res.status(500).json({ error: 'Failed to send notification email.' });
         }
 
-        return res.status(200).json({ 
-            message: 'Thank you! Your estimate request has been submitted successfully. LuxeForm Remodeling has received your project details, and you will receive a WhatsApp message shortly to continue the conversation.' 
+        return res.status(200).json({
+            message: 'Thank you! Your estimate request has been submitted successfully. LuxeForm Remodeling has received your project details, and you will receive a WhatsApp message shortly to continue the conversation.'
         });
 
     } catch (error) {
